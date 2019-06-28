@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Socket.IO Chat Example</title>
+  <style type="">
+		body,div,dl,dt,dd,ul,ol,li,h1,h2,h3,h4,h5,h6,pre,form,fieldset,input,textarea,p,blockquote,th,tr,td {margin:0;padding:0; font-size:12px;} 
+		table {border-collapse:collapse;border-spacing:0;} 
+		fieldset,img {border:0} 
+		address,caption,cite,code,dfn,em,strong,th,var {font-style:normal;font-weight:normal} 
+		ol,ul {list-style:none} 
+		caption,th,td{text-align:center} 
+		h1,h2,h3,h4,h5,h6 {font-size:100%;font-weight:normal} 
+		q:before,q:after {content:''} 
+		abbr,acronym { border:0}
+		#login{
+			width:300px;
+			border:1px solid #ccc;
+			background:#eee;
+			margin:100px auto 0 auto;
+			
+		}
+		h1{
+			line-height:40px;
+			font-size:24px;
+			font-weight:bold;
+			text-align:center;
+		}
+		#login ul{
+			width:250px;
+			margin:30px auto 0 auto;
+		}
+		#login ul li{
+			height:30px;
+			margin-bottom:10px;
+		}
+		#login ul li label{
+			font-size:14px;
+			line-height:30px;
+			display:inline-block;
+		}
+		#login ul li input{
+			border:1px solid #ccc;
+			padding-left:5px;
+			display:inline-block;
+			height:30px;
+		}
+		#login ul li button{
+			display:block;
+			width:100px;
+			height:30px;
+			margin:0 auto;
+			font-size:14px;
+		}
+		#loginAfter{
+			display:none;
+			width:400px;
+			height:500px;
+			border:1px solid #ccc;
+			background:#eee;
+			margin:50px auto 0 auto;
+		}
+		#loginAfter .loginAfter-con{
+			height:400px;
+			background-color:#fff;
+			overflow-x:hidden;
+			overflow-y:auto;
+			border-bottom:1px solid #ccc;
+		}
+		#loginAfter .loginAfter-con ul{
+			padding:10px;
+		}
+		#loginAfter .loginAfter-con ul li{
+			margin-bottom:10px;
+		}
+		#loginAfter .loginAfter-con ul li p{
+			line-height:30px;
+		}
+		#loginAfter .loginAfter-con ul li p span{
+			line-height:30px;
+			font-size:14px;
+			color:#00f;
+			font-weight:bold;
+		}
+		#loginAfter .loginAfter-con ul li p i{
+			padding-left:10px;
+			font-size:14px;
+			color:#00f;
+		}
+		#loginAfter .loginAfter-con ul li div{
+			font-size:14px;
+			color:#000;
+			line-height:24px;
+		}
+		#loginAfter .sendMess{
+			height:99px;
+			background-color:#efefef;
+			position:relative;
+		}
+		.sendMess-edit{
+			padding:5px;
+			line-height:24px;
+			color:#000;
+			height:89px;
+			overflow-x:hidden;
+			overflow-y:auto;
+			
+		}
+		.sendMess button{
+			position:absolute;
+			bottom:5px;
+			right:5px;
+			width:80px;
+			height:30px;
+            background: #4eaae2;
+			border:none;
+            border-radius: 3px;
+			color:#fff;
+		}
+  </style>
+</head>
+<body data-app = "index">
+	<div id="login">
+		<h1>登录</h1>
+		<ul>
+			<li>
+				<label>您的昵称:</label>
+				<input type="text" placeholder="您的昵称" data-bind="value:initData" id="nick"/>
+			</li>
+			<li>
+				<button type="button" data-bind="click:enterLogin">进入聊天</button>
+			</li>
+		</ul>
+	</div>
+	<div id="loginAfter">
+		<div class="loginAfter-con">
+			<ul id="loginAfter-con"></ul>
+		</div>
+		<div class="sendMess">
+			<div class="sendMess-edit" contenteditable="true" id="sendMess-edit"></div>
+			<button type="button" data-bind="click:senMess">发送</button>
+		</div>
+	</div>
+  <script src="/client/socket.io.js"></script>
+  <script type="templete/szy" id="templete">
+	<li>
+		<p><span>{{name}}</span><i>{{time}}</i></p>
+		<div>{{content}}</div>
+	</li>
+  </script>
+  <script>
+  //简单小插件
+  ;(function($){
+	//each扩展
+	Array.prototype.each = function(){
+		var argu = arguments;
+			arr = this;
+		if(typeof argu[0] == 'function'){
+			for(var i=0;i<arr.length;i++){
+				argu[0](arr[i],i);
+			}
+		}
+	};
+	//时间格式化
+	Date.prototype.Format = function (fmt) {
+		var o = {
+			"M+": this.getMonth() + 1, //月份 
+			"d+": this.getDate(), //日 
+			"h+": this.getHours(), //小时 
+			"m+": this.getMinutes(), //分 
+			"s+": this.getSeconds(), //秒 
+			"q+": Math.floor((this.getMonth() + 3) / 3), //季度 
+			"S": this.getMilliseconds() //毫秒 
+		};
+		if (/(y+)/.test(fmt)) fmt = fmt.replace(RegExp.$1, (this.getFullYear() + "").substr(4 - RegExp.$1.length));
+		for (var k in o)
+		if (new RegExp("(" + k + ")").test(fmt)) fmt = fmt.replace(RegExp.$1, (RegExp.$1.length == 1) ? (o[k]) : (("00" + o[k]).substr(("" + o[k]).length)));
+		return fmt;
+	};
+	//slice copy
+	var slice = Array.prototype.slice;
+	//all Dom
+	var appElement = document.querySelectorAll('[data-app]'),
+		appElement = [].slice.call(appElement);
+	var handleElement = {};
+	//循环
+	for(var i=0;i<appElement.length;i++){
+		var allElement = appElement[i].querySelectorAll('*');
+		allElement = [].slice.call(allElement);
+		allElement = allElement.filter(function(item){
+			var elm = item;
+			if(elm.nodeType == 1){ // element_node
+				return elm;
+			}
+        });
+        
+        // 绑定该appName，找到已绑定元素节点
+		var appName = appElement[i].getAttribute('data-app');
+		handleElement[appName] = [];
+		allElement.each(function(items){
+			var attr = items.getAttribute('data-bind');
+			if(!!attr){
+				handleElement[appName].push({
+					'ele':items,
+					'bindHtml':attr
+				});
+			}
+		});
+	}
+	$.handleElement = handleElement;
+	//
+	var eventHandle = [];
+	//aciton 接口提供
+	/*
+	{
+		注册
+		appName:'',
+		fnName:'',
+		data:{}
+	}
+	*/
+	$.register = function(parm){
+		var appAction = null;
+		if(!!parm){
+			var app = parm.appName;
+			if(!!handleElement[app]){
+				var bindData = handleElement[app];
+				for(var i=0;i<bindData.length;i++){
+					var listI = bindData[i],
+						html = listI.bindHtml.split(':');
+						if('on'+html[0] in $){
+							listI.ele.addEventListener(html[0],typeof parm[html[1]] == 'function' ? parm[html[1]] : null,false);
+						}
+						switch(html[0]){
+							case 'html':
+								if(!!parm.data[html[1]]){
+									listI.ele.innerHTML = parm.data[html[1]];
+								}
+							break;
+							case 'text':
+								if(!!parm.data[html[1]]){
+									listI.ele.innerText = parm.data[html[1]];
+								}
+                            break;
+                            // value赋值
+							case 'value':
+								if(!!parm.data[html[1]]){
+									listI.ele.value = parm.data[html[1]];
+								}
+							break;
+							default:
+							break
+						}
+				}
+				appAction = parm;
+			}else{
+				console.error('您还未绑定该appName');
+			}
+		}
+		return appAction;
+	};
+	//uuid
+	$.uuidGrow = function(){
+		var s = [];
+		var hexDigits = "0123456789abcdef";
+		for (var i = 0; i < 36; i++) {
+			s[i] = hexDigits.substr(Math.floor(Math.random() * 0x10), 1);
+		}
+		s[14] = "4"; 
+		s[19] = hexDigits.substr((s[19] & 0x3) | 0x8, 1);
+		s[8] = s[13] = s[18] = s[23] = "-";
+		var uuid = s.join("");
+		return uuid;
+	};
+	
+  }(window));
+  
+  var localData = window.localStorage.getItem('loginMess'),
+	  cache = {},
+	  currentUserMess = null;
+  //定义app
+  var app = register({
+	'appName':'index',
+	'enterLogin':function(){
+		var nick = document.querySelector('#nick'),
+			value = nick.value;
+        loadpage(value);
+		// if(/^\w{6,16}$/.test(value)){
+		// }else{
+		// 	alert('昵称为字母和数字的组合6-16位！');
+		// 	return false;
+		// }
+	},
+	'senMess':function(){
+		var content = document.querySelector('#sendMess-edit');
+		sendMess({id:currentUserMess['login'].id,content:content.innerHTML,name:currentUserMess['login'].name});
+		appendTemplete(content.innerHTML);
+		content.innerHTML = '';
+	},
+	'data':{
+		initData:localData ? JSON.parse(localData).login.name : ''
+	}
+  });
+  //加载页面
+  function loadpage(name){
+	//   if(!!localData){
+	// 	  createConnect(JSON.parse(localData),onMessage);
+	//   }else{
+		  var uuid = uuidGrow();
+		  var obj = {};
+		  obj['login'] = {};
+		  obj['login'].name = name;
+		  obj['login'].id = uuid;
+		  createConnect(obj,onMessage);
+		  window.localStorage.setItem('loginMess',JSON.stringify(obj))
+	//   }
+  }
+  //接收消息
+  function onMessage(data){
+	//自身消息不处理
+	if(data.id != currentUserMess['login'].id){
+		appendTemplete(data.content,data);
+	}
+  }
+  //连接socket
+  function createConnect(obj,onmes){
+	var socket = app.socket = io("ws://192.168.0.23:5555");
+	socket.on('msg',onmes);
+	currentUserMess = obj;
+	sendMess(obj); //向服务器发送消息
+	//页面切换
+	document.querySelector('#loginAfter').style.display = 'block';
+	document.querySelector('#login').style.display = 'none';
+  }
+  //send
+  function sendMess(data){
+	  app.socket.emit('msg',data);
+  }
+  //处理模板
+  function appendTemplete(html,data){
+	  var ul = document.querySelector('#loginAfter-con'),
+		  countHtml = '';
+		  templete = '';
+		  
+	  if(cache.templete){
+		  templete = cache.templete;
+	  }else{
+		  templete = document.querySelector('#templete').innerHTML.replace(/\n|\r/g,'');
+	  }
+	  if(data){
+		data = {'name':data.name,'time':(new Date(data.time)).Format("yyyy-MM-dd hh:mm:ss"),'content':data.content};
+	  }else{
+		 data = {'name':currentUserMess.login.name,'time':(new Date()).Format("yyyy-MM-dd hh:mm:ss"),'content':html}; 
+	  }
+	  if(cache.combile){
+		  countHtml = cache.combile(data);
+	  }else{
+		var outPut = '';
+			outPut += 'var str = "";\n'
+		var html = templete.split('{{'); 
+		for(var i=0;i<html.length;i++){
+			var listI = html[i];
+			if(/\}\}/.test(listI)){
+				listIHtml = listI.split('}}');
+				listIHtml[0] = 'str+=data.' + listIHtml[0] + ';\n';
+				outPut += listIHtml[0] +'str+=\"' + listIHtml[1] + '\";\n';
+			}else{
+				outPut += 'str+=\"'+ listI +'\";\n';
+			}
+		}
+		outPut += 'return str;';
+		cache.combile = new Function('data',outPut);
+		countHtml = cache.combile(data);
+	  }
+	  if(ul.childNodes.length == 0){
+		  ul.innerHTML = countHtml;
+	  }else{
+		 var li = document.createElement('li');
+		 li.innerHTML = countHtml.replace(/<li>|<\/li>/,'');
+		 ul.appendChild(li);
+	  }
+  }
+  </script>
+</body>
+</html>
